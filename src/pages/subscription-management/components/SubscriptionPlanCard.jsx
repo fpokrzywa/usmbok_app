@@ -40,7 +40,9 @@ const SubscriptionPlanCard = ({ plan, isCurrentPlan, onSelect, loading }) => {
     return credits?.toString() || '0';
   };
 
-  const features = plan?.features ? JSON.parse(plan?.features) : [];
+  const features = plan?.features ? 
+    (typeof plan?.features === 'string' ? JSON.parse(plan?.features) : plan?.features) : 
+    [];
 
   return (
     <div className={`relative bg-white border-2 rounded-lg p-6 ${getPlanColor(plan?.tier)} ${isCurrentPlan ? 'ring-2 ring-blue-500' : ''}`}>
@@ -112,8 +114,9 @@ const SubscriptionPlanCard = ({ plan, isCurrentPlan, onSelect, loading }) => {
             onClick={() => onSelect?.()}
             disabled={loading}
             className={`w-full ${
-              plan?.tier === 'founder' ?'bg-purple-600 hover:bg-purple-700 text-white'
-                : plan?.tier === 'subscriber' ?'bg-blue-600 hover:bg-blue-700 text-white' :'bg-gray-600 hover:bg-gray-700 text-white'
+              plan?.tier === 'founder' ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                : plan?.tier === 'subscriber' ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                : plan?.tier === 'unlimited'? 'bg-green-600 hover:bg-green-700 text-white' :'bg-gray-600 hover:bg-gray-700 text-white'
             }`}
           >
             {loading ? 'Processing...' : 'Select Plan'}

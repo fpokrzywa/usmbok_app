@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+
 import { useAuth } from '../../contexts/AuthContext';
 import Header from '../../components/ui/Header';
 import Button from '../../components/ui/Button';
@@ -8,6 +8,7 @@ import SubscriptionPlanCard from './components/SubscriptionPlanCard';
 import BillingHistoryPanel from './components/BillingHistoryPanel';
 import TrialStatusCard from './components/TrialStatusCard';
 import SubscriptionControls from './components/SubscriptionControls';
+import subscriptionService from '../../services/subscriptionService';
 
 const SubscriptionManagement = () => {
   const { user } = useAuth();
@@ -30,38 +31,23 @@ const SubscriptionManagement = () => {
       setLoading(true);
       setError(null);
 
-      // Fetch current subscription details
-      const { data: subscriptionData, error: subError } = await supabase?.rpc('get_user_subscription_details', { user_uuid: user?.id });
+      // Fetch current subscription details using new service
+      const subscription = await subscriptionService?.getCurrentSubscription(user?.id);
+      setCurrentSubscription(subscription);
 
-      if (subError) throw subError;
+      // Fetch available subscription plans using new service
+      const plans = await subscriptionService?.getSubscriptionPlans();
+      setSubscriptionPlans(plans || []);
 
-      if (subscriptionData?.length > 0) {
-        setCurrentSubscription(subscriptionData?.[0]);
-      }
+      // Fetch plan change history using new service
+      const changes = await subscriptionService?.getSubscriptionHistory(user?.id, 10);
+      setPlanChanges(changes || []);
 
-      // Fetch available subscription plans
-      const { data: plansData, error: plansError } = await supabase?.from('subscription_plans')?.select('*')?.eq('is_active', true)?.order('price_usd', { ascending: true });
-
-      if (plansError) throw plansError;
-      setSubscriptionPlans(plansData || []);
-
-      // Fetch plan change history
-      const { data: changesData, error: changesError } = await supabase?.from('subscription_plan_changes')?.select(`
-          *,
-          processed_by:processed_by(full_name)
-        `)?.eq('user_id', user?.id)?.order('created_at', { ascending: false })?.limit(10);
-
-      if (changesError) throw changesError;
-      setPlanChanges(changesData || []);
-
-      // Fetch recent billing simulations
-      const { data: simulationsData, error: simError } = await supabase?.from('billing_simulations')?.select('*')?.eq('user_id', user?.id)?.order('created_at', { ascending: false })?.limit(5);
-
-      if (simError) throw simError;
-      setBillingSimulations(simulationsData || []);
+      // Fetch recent billing simulations using new service
+      const simulations = await subscriptionService?.getBillingSimulations(user?.id, 5);
+      setBillingSimulations(simulations || []);
 
     } catch (err) {
-      console.error('Error fetching subscription data:', err);
       setError(err?.message || 'Failed to load subscription data');
     } finally {
       setLoading(false);
@@ -72,32 +58,13 @@ const SubscriptionManagement = () => {
     try {
       setLoading(true);
       
-      // First simulate the plan change
-      const { data: simulationId, error: simError } = await supabase?.rpc('simulate_subscription_change', {
-          user_uuid: user?.id,
-          new_tier: newTier,
-          payment_method: 'card'
-        });
-
-      if (simError) throw simError;
-
-      // In simulation mode, we don't process the actual change
-      // Just update the simulation status to completed
-      const { error: updateError } = await supabase?.from('billing_simulations')?.update({ 
-          payment_status: 'completed',
-          processed_at: new Date()?.toISOString()
-        })?.eq('id', simulationId);
-
-      if (updateError) throw updateError;
-
-      // Refresh data to show the simulation
+      await subscriptionService?.changeSubscriptionPlan(user?.id, newTier);
       await fetchSubscriptionData();
       
       setSelectedPlan(null);
-      alert('Subscription change simulated successfully! In production, this would process the actual payment.');
+      alert('Subscription updated successfully!');
       
     } catch (err) {
-      console.error('Error changing subscription plan:', err);
       setError(err?.message || 'Failed to change subscription plan');
     } finally {
       setLoading(false);
@@ -108,21 +75,12 @@ const SubscriptionManagement = () => {
     try {
       setLoading(true);
       
-      const { error } = await supabase?.from('user_subscriptions')?.update({
-          status: 'cancelled',
-          cancellation_date: new Date()?.toISOString(),
-          cancellation_reason: 'User requested cancellation',
-          auto_renewal: false,
-          updated_at: new Date()?.toISOString()
-        })?.eq('user_id', user?.id)?.eq('is_active', true);
-
-      if (error) throw error;
-
+      await subscriptionService?.cancelSubscription(user?.id);
       await fetchSubscriptionData();
+      
       alert('Subscription cancelled successfully. You will retain access until your next billing date.');
       
     } catch (err) {
-      console.error('Error cancelling subscription:', err);
       setError(err?.message || 'Failed to cancel subscription');
     } finally {
       setLoading(false);

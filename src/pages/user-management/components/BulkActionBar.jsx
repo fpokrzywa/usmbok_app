@@ -84,8 +84,9 @@ const BulkActionBar = ({ selectedCount, onBulkAction }) => {
                   onValueChange={(value) => setActionData({ ...actionData, plan: value })}
                   options={[
                     { value: 'trial', label: 'Trial' },
-                    { value: 'premium', label: 'Premium' },
-                    { value: 'free', label: 'Free' }
+                    { value: 'subscriber', label: 'Subscriber' },
+                    { value: 'founder', label: 'Founder' },
+                    { value: 'unlimited', label: 'Unlimited' }
                   ]}
                 />
               </div>

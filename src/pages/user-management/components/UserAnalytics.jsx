@@ -5,45 +5,59 @@ const UserAnalytics = ({ analytics }) => {
   const cards = [
     {
       title: 'Total Users',
-      value: analytics?.totalUsers?.toLocaleString() || '0',
+      value: analytics?.totalUsers || 0,
       icon: 'Users',
       color: 'blue',
       description: 'All registered users'
     },
     {
       title: 'Active Users',
-      value: analytics?.activeUsers?.toLocaleString() || '0',
+      value: analytics?.activeUsers || 0,
       icon: 'UserCheck',
       color: 'green',
       description: 'Currently active users'
     },
     {
       title: 'Trial Users',
-      value: analytics?.trialUsers?.toLocaleString() || '0',
+      value: analytics?.trialUsers || 0,
       icon: 'Clock',
-      color: 'yellow',
-      description: 'Users on trial plan'
+      color: 'orange',
+      description: 'Users on trial subscription'
     },
     {
-      title: 'Premium Users',
-      value: analytics?.premiumUsers?.toLocaleString() || '0',
+      title: 'Subscriber Users',
+      value: analytics?.subscriberUsers || 0,
       icon: 'Crown',
       color: 'purple',
-      description: 'Premium subscribers'
+      description: 'Active subscribers'
+    },
+    {
+      title: 'Founder Users',
+      value: analytics?.founderUsers || 0,
+      icon: 'Award',
+      color: 'amber',
+      description: 'Founder tier users'
+    },
+    {
+      title: 'Unlimited Users',
+      value: analytics?.unlimitedUsers || 0,
+      icon: 'Zap',
+      color: 'indigo',
+      description: 'Unlimited plan users'
     },
     {
       title: 'Total Credits',
-      value: analytics?.totalCredits?.toLocaleString() || '0',
+      value: (analytics?.totalCredits || 0)?.toLocaleString(),
       icon: 'Coins',
-      color: 'orange',
+      color: 'yellow',
       description: 'Credits across all users'
     },
     {
-      title: 'Avg Credits',
-      value: analytics?.avgCreditsPerUser?.toLocaleString() || '0',
+      title: 'Average Credits',
+      value: (analytics?.avgCreditsPerUser || 0)?.toLocaleString(),
       icon: 'TrendingUp',
-      color: 'indigo',
-      description: 'Average per user'
+      color: 'teal',
+      description: 'Average credits per user'
     }
   ];
 
@@ -53,7 +67,8 @@ const UserAnalytics = ({ analytics }) => {
     yellow: 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900 dark:text-yellow-300',
     purple: 'bg-purple-100 text-purple-600 dark:bg-purple-900 dark:text-purple-300',
     orange: 'bg-orange-100 text-orange-600 dark:bg-orange-900 dark:text-orange-300',
-    indigo: 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-300'
+    indigo: 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-300',
+    teal: 'bg-teal-100 text-teal-600 dark:bg-teal-900 dark:text-teal-300'
   };
 
   return (

@@ -1,8 +1,16 @@
 import { supabase } from '../lib/supabase';
 
 export const userManagementService = {
-  // Fetch all users with their credits and subscriptions
+  // Fetch all users with their credits and subscriptions - Enhanced for complete admin access
   async fetchAllUsers() {
+    // First check if user is admin
+    const { data: currentUser } = await supabase?.auth?.getUser();
+    
+    if (!currentUser?.user) {
+      throw new Error('User not authenticated');
+    }
+
+    // Enhanced query that admins can see all users, regular users see only themselves
     const { data: userProfiles, error } = await supabase
       ?.from('user_profiles')
       ?.select(`
@@ -12,13 +20,25 @@ export const userManagementService = {
           updated_at
         ),
         user_subscriptions (
-          plan,
+          tier,
+          status,
           is_active,
-          credits_per_month
+          credits_per_month,
+          created_at,
+          updated_at,
+          plan_id,
+          subscription_plans (
+            name,
+            tier,
+            price_usd
+          )
         )
       `);
 
     if (error) throw error;
+
+    // Return all users for admin (policies handle the filtering)
+    // Regular users will only see their own data due to RLS policies
     return userProfiles || [];
   },
 
@@ -62,31 +82,93 @@ export const userManagementService = {
   },
 
   // Add credits to user account
-  async addUserCredits(userId, amount, description = 'Admin credit addition') {
-    const { data, error } = await supabase
-      ?.rpc('add_user_credits', {
-        p_user_id: userId,
-        p_amount: amount,
-        p_description: description,
-        p_transaction_type: 'adjustment'
+  addUserCredits: async (userId, amount, description = 'Admin credit adjustment') => {
+    try {
+      // Get current user for admin logging
+      const { data: { user: currentUser } } = await supabase?.auth?.getUser();
+      if (!currentUser) throw new Error('Not authenticated');
+
+      // Get admin user profile for logging
+      const { data: adminProfile } = await supabase?.from('user_profiles')?.select('full_name, email')?.eq('id', currentUser?.id)?.single();
+
+      const adminName = adminProfile?.full_name || adminProfile?.email || 'Unknown Admin';
+
+      // Use the add_user_credits function
+      const { data, error } = await supabase?.rpc('add_user_credits', {
+        user_id: userId,
+        credit_amount: amount
       });
 
-    if (error) throw error;
-    return data;
+      if (error) throw error;
+
+      // Log admin activity with admin name
+      const { error: logError } = await supabase?.from('admin_activity_log')?.insert({
+          admin_user_id: currentUser?.id,
+          user_id: userId,
+          entity_type: 'user',
+          entity_id: userId,
+          activity_type: 'credit_adjustment',
+          description: `${amount} credits added by ${adminName}: ${description}`,
+          amount: amount,
+          metadata: {
+            action: 'add_credits',
+            amount: amount,
+            description: description,
+            admin_name: adminName
+          }
+        });
+
+      if (logError) console.error('Error logging admin activity:', logError);
+
+      return data;
+    } catch (error) {
+      throw error;
+    }
   },
 
   // Deduct credits from user account
-  async deductUserCredits(userId, amount, description = 'Admin credit deduction') {
-    const { data, error } = await supabase
-      ?.rpc('deduct_user_credits', {
-        p_user_id: userId,
-        p_amount: amount,
-        p_description: description,
-        p_transaction_type: 'adjustment'
+  deductUserCredits: async (userId, amount, description = 'Admin credit adjustment') => {
+    try {
+      // Get current user for admin logging
+      const { data: { user: currentUser } } = await supabase?.auth?.getUser();
+      if (!currentUser) throw new Error('Not authenticated');
+
+      // Get admin user profile for logging
+      const { data: adminProfile } = await supabase?.from('user_profiles')?.select('full_name, email')?.eq('id', currentUser?.id)?.single();
+
+      const adminName = adminProfile?.full_name || adminProfile?.email || 'Unknown Admin';
+
+      // Use the deduct_user_credits function
+      const { data, error } = await supabase?.rpc('deduct_user_credits', {
+        user_id: userId,
+        credit_amount: amount
       });
 
-    if (error) throw error;
-    return data;
+      if (error) throw error;
+
+      // Log admin activity with admin name
+      const { error: logError } = await supabase?.from('admin_activity_log')?.insert({
+          admin_user_id: currentUser?.id,
+          user_id: userId,
+          entity_type: 'user',
+          entity_id: userId,
+          activity_type: 'credit_adjustment',
+          description: `${amount} credits deducted by ${adminName}: ${description}`,
+          amount: -amount,
+          metadata: {
+            action: 'deduct_credits',
+            amount: amount,
+            description: description,
+            admin_name: adminName
+          }
+        });
+
+      if (logError) console.error('Error logging admin activity:', logError);
+
+      return data;
+    } catch (error) {
+      throw error;
+    }
   },
 
   // Update user subscription
@@ -182,20 +264,35 @@ export const userManagementService = {
     return data;
   },
 
-  // Get analytics data
+  // Enhanced analytics that works with complete user data
   async getAnalytics() {
-    const { data: users, error } = await this.fetchAllUsers();
+    const users = await this.fetchAllUsers();
     
-    if (error) throw error;
-
     const totalUsers = users?.length || 0;
     const activeUsers = users?.filter(u => u?.is_active)?.length || 0;
+    
+    // Update to use tier instead of plan
     const trialUsers = users?.filter(u => 
-      u?.user_subscriptions?.some(s => s?.plan === 'trial')
+      u?.user_subscriptions?.some(s => s?.tier === 'registered' && s?.status === 'trial')
     )?.length || 0;
+    const subscriberUsers = users?.filter(u => 
+      u?.user_subscriptions?.some(s => s?.tier === 'subscriber')
+    )?.length || 0;
+    const founderUsers = users?.filter(u => 
+      u?.user_subscriptions?.some(s => s?.tier === 'founder')
+    )?.length || 0;
+    const unlimitedUsers = users?.filter(u => 
+      u?.user_subscriptions?.some(s => s?.tier === 'unlimited')
+    )?.length || 0;
+    
+    // Admin users count
+    const adminUsers = users?.filter(u => u?.role === 'admin')?.length || 0;
+    
+    // Legacy premium count for backward compatibility
     const premiumUsers = users?.filter(u => 
-      u?.user_subscriptions?.some(s => s?.plan === 'premium')
+      u?.user_subscriptions?.some(s => ['subscriber', 'founder', 'unlimited']?.includes(s?.tier))
     )?.length || 0;
+    
     const totalCredits = users?.reduce((sum, u) => 
       sum + (u?.user_credits?.[0]?.balance || 0), 0
     ) || 0;
@@ -204,9 +301,34 @@ export const userManagementService = {
       totalUsers,
       activeUsers,
       trialUsers,
-      premiumUsers,
+      premiumUsers, // Keep for backward compatibility
+      subscriberUsers,
+      founderUsers, 
+      unlimitedUsers,
+      adminUsers, // New metric
       totalCredits,
       avgCreditsPerUser: totalUsers > 0 ? Math.round(totalCredits / totalUsers) : 0
     };
+  },
+
+  // New function to manually sync users (for admin use)
+  async syncMissingUsers() {
+    const { data, error } = await supabase?.rpc('sync_missing_user_profiles');
+    if (error) throw error;
+    return data;
+  },
+
+  // New function to sync user credits (for admin use)
+  async syncMissingUserCredits() {
+    const { data, error } = await supabase?.rpc('sync_missing_user_credits');
+    if (error) throw error;
+    return data;
+  },
+
+  // New function to sync user subscriptions (for admin use) 
+  async syncMissingUserSubscriptions() {
+    const { data, error } = await supabase?.rpc('sync_missing_user_subscriptions');
+    if (error) throw error;
+    return data;
   }
 };

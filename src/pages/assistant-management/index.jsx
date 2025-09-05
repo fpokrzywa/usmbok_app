@@ -10,6 +10,7 @@ import Select from '../../components/ui/Select';
 import AssistantCard from './components/AssistantCard';
 import AssistantEditor from './components/AssistantEditor';
 import BulkActionsPanel from './components/BulkActionsPanel';
+import activityLogService from '../../services/activityLogService';
 
 const AssistantManagement = () => {
   const { user } = useAuth();
@@ -116,6 +117,51 @@ const AssistantManagement = () => {
     setFilteredAssistants(filtered);
   }, [assistants, searchQuery, statusFilter, domainFilter]);
 
+  // Real-time subscription for automatic updates
+  useEffect(() => {
+    if (!hasAdminAccess) return;
+
+    // Set up real-time subscription for assistants table changes
+    const assistantsSubscription = supabase
+      ?.channel('assistants_changes')
+      ?.on('postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'assistants'
+        },
+        (payload) => {
+          console.log('Assistant data changed:', payload);
+          // Refresh assistant data when any assistant changes
+          fetchAssistants();
+        }
+      )
+      ?.subscribe();
+
+    // Set up real-time subscription for knowledge_bank_assistants changes
+    const knowledgeBankAssistantsSubscription = supabase
+      ?.channel('knowledge_bank_assistants_changes')
+      ?.on('postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'knowledge_bank_assistants'
+        },
+        (payload) => {
+          console.log('Knowledge bank assistant mapping changed:', payload);
+          // Refresh assistant data when knowledge bank mappings change
+          fetchAssistants();
+        }
+      )
+      ?.subscribe();
+
+    // Cleanup subscriptions on unmount or when admin access changes
+    return () => {
+      assistantsSubscription?.unsubscribe();
+      knowledgeBankAssistantsSubscription?.unsubscribe();
+    };
+  }, [hasAdminAccess]);
+
   const handleAssistantSelect = (assistantId) => {
     const newSelected = new Set(selectedAssistants);
     if (newSelected?.has(assistantId)) {
@@ -149,13 +195,37 @@ const AssistantManagement = () => {
       if (editingAssistant) {
         // Update existing assistant
         const { error } = await supabase?.from('assistants')?.update(assistantData)?.eq('id', editingAssistant?.id);
-
         if (error) throw error;
+
+        // Log update activity
+        await activityLogService?.logActivity({
+          activityType: 'assistant_updated',
+          entityType: 'assistant',
+          entityId: editingAssistant?.id,
+          description: `Assistant "${assistantData?.name}" updated`,
+          metadata: {
+            assistant_name: assistantData?.name,
+            knowledge_bank: assistantData?.knowledge_bank,
+            changes: assistantData
+          }
+        });
       } else {
         // Create new assistant
-        const { error } = await supabase?.from('assistants')?.insert(assistantData);
-
+        const { data, error } = await supabase?.from('assistants')?.insert(assistantData)?.select()?.single();
         if (error) throw error;
+
+        // Log creation activity
+        await activityLogService?.logActivity({
+          activityType: 'assistant_created',
+          entityType: 'assistant',
+          entityId: data?.id,
+          description: `New assistant "${assistantData?.name}" created`,
+          metadata: {
+            assistant_name: assistantData?.name,
+            knowledge_bank: assistantData?.knowledge_bank,
+            domain: assistantData?.domain
+          }
+        });
       }
 
       await fetchAssistants();
@@ -188,6 +258,49 @@ const AssistantManagement = () => {
       setSelectedAssistants(new Set());
     } catch (error) {
       console.error('Error updating assistant status:', error);
+    }
+  };
+
+  const handleAssistantStatusChange = async (assistantId, action, reason) => {
+    try {
+      const newStatus = action === 'activate';
+      
+      // Update assistant status
+      const { error } = await supabase
+        ?.from('assistants')
+        ?.update({ is_active: newStatus })
+        ?.eq('id', assistantId);
+
+      if (error) throw error;
+
+      // Log admin activity
+      const { data: adminProfile } = await supabase
+        ?.from('user_profiles')
+        ?.select('full_name')
+        ?.eq('id', user?.id)
+        ?.single();
+
+      const { error: logError } = await supabase
+        ?.from('admin_activity_log')
+        ?.insert({
+          admin_user_id: user?.id,
+          entity_type: 'assistant',
+          entity_id: assistantId,
+          activity_type: newStatus ? 'assistant_activated' : 'assistant_deactivated',
+          description: reason || `Assistant ${action}d by ${adminProfile?.full_name || 'admin'}`,
+          metadata: {
+            action: action,
+            reason: reason,
+            admin_name: adminProfile?.full_name
+          }
+        });
+
+      if (logError) console.error('Error logging admin activity:', logError);
+
+      await fetchAssistants();
+    } catch (error) {
+      console.error(`Error ${action}ing assistant:`, error);
+      throw error;
     }
   };
 
@@ -335,6 +448,7 @@ const AssistantManagement = () => {
                 onSelect={() => handleAssistantSelect(assistant?.id)}
                 onEdit={() => handleEditAssistant(assistant)}
                 onDelete={() => handleDeleteAssistant(assistant?.id)}
+                onStatusChange={handleAssistantStatusChange}
               />
             ))}
           </div>

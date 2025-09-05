@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import Button from '../../../components/ui/Button';
-import { X, AlertTriangle, CreditCard, Shield } from 'lucide-react';
+import { AlertTriangle, CheckCircle, X, Settings } from 'lucide-react';
 
 const SubscriptionControls = ({ 
   currentSubscription, 
@@ -10,145 +10,43 @@ const SubscriptionControls = ({
   onClose, 
   loading 
 }) => {
-  const [showConfirmation, setShowConfirmation] = useState(false);
-  const [confirmationAction, setConfirmationAction] = useState(null);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
 
-  if (!selectedPlan && !showConfirmation) {
+  if (!selectedPlan && !showCancelConfirm) {
     return null;
   }
 
-  const handlePlanChangeConfirm = () => {
-    setConfirmationAction('change');
-    setShowConfirmation(true);
-  };
-
-  const handleCancelConfirm = () => {
-    setConfirmationAction('cancel');
-    setShowConfirmation(true);
-  };
-
-  const executeAction = () => {
-    if (confirmationAction === 'change') {
-      onPlanChange?.(selectedPlan);
-    } else if (confirmationAction === 'cancel') {
-      onCancel?.();
+  const handleConfirmChange = () => {
+    if (selectedPlan && onPlanChange) {
+      onPlanChange(selectedPlan);
     }
-    setShowConfirmation(false);
-    setConfirmationAction(null);
-    onClose?.();
   };
 
-  const getPlanDetails = (tier) => {
-    const plans = {
-      registered: { name: 'Registered', price: 0, credits: '100K' },
-      subscriber: { name: 'Subscriber', price: 29.99, credits: '1M' },
-      founder: { name: 'Founder', price: 99.99, credits: '5M' },
-      admin: { name: 'Admin', price: 0, credits: 'Unlimited' }
-    };
-    return plans?.[tier] || { name: 'Unknown', price: 0, credits: '0' };
+  const handleCancelSubscription = () => {
+    if (onCancel) {
+      onCancel(cancelReason || 'User requested cancellation');
+      setShowCancelConfirm(false);
+      setCancelReason('');
+    }
   };
 
-  const currentPlan = getPlanDetails(currentSubscription?.tier);
-  const newPlan = getPlanDetails(selectedPlan);
+  // Plan Change Confirmation Modal
+  if (selectedPlan && !showCancelConfirm) {
+    const isUpgrade = currentSubscription?.tier && 
+      ['registered', 'subscriber', 'founder', 'unlimited']?.indexOf(selectedPlan) >
+      ['registered', 'subscriber', 'founder', 'unlimited']?.indexOf(currentSubscription?.tier);
 
-  // Plan Change Modal
-  if (selectedPlan && !showConfirmation) {
     return (
-      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-        <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">Confirm Plan Change</h3>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600"
-              disabled={loading}
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="mb-6">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <div className="font-medium text-gray-900">Current Plan:</div>
-                  <div className="text-gray-600">{currentPlan?.name}</div>
-                  <div className="text-gray-600">${currentPlan?.price}/month</div>
-                  <div className="text-gray-600">{currentPlan?.credits} credits</div>
-                </div>
-                <div>
-                  <div className="font-medium text-gray-900">New Plan:</div>
-                  <div className="text-gray-600">{newPlan?.name}</div>
-                  <div className="text-gray-600">${newPlan?.price}/month</div>
-                  <div className="text-gray-600">{newPlan?.credits} credits</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-              <div className="flex items-start">
-                <Shield className="w-5 h-5 text-blue-500 mt-0.5 mr-2" />
-                <div className="text-sm text-blue-800">
-                  <div className="font-medium">Simulation Mode</div>
-                  <div className="mt-1">
-                    This is a payment simulation. No actual charges will be processed. 
-                    In production mode, this would handle real payments via Stripe.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {newPlan?.price !== currentPlan?.price && (
-              <div className="mt-4 text-sm text-gray-600">
-                <div className="font-medium">Billing Changes:</div>
-                <ul className="mt-1 space-y-1">
-                  <li>• Immediate effective date</li>
-                  <li>• Prorated billing for current cycle</li>
-                  <li>• Next billing: {new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)?.toLocaleDateString()}</li>
-                </ul>
-              </div>
-            )}
-          </div>
-
-          <div className="flex space-x-3">
-            <Button
-              onClick={onClose}
-              disabled={loading}
-              className="flex-1 bg-gray-300 text-gray-700 hover:bg-gray-400"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handlePlanChangeConfirm}
-              disabled={loading}
-              className="flex-1 bg-blue-600 text-white hover:bg-blue-700"
-            >
-              <CreditCard className="w-4 h-4 mr-2" />
-              {loading ? 'Processing...' : 'Confirm Change'}
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Confirmation Modal
-  if (showConfirmation) {
-    return (
-      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-        <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">
-              {confirmationAction === 'change' ? 'Confirm Plan Change' : 'Confirm Cancellation'}
+            <h3 className="text-lg font-semibold text-gray-900">
+              {isUpgrade ? 'Upgrade Plan' : 'Change Plan'}
             </h3>
-            <button
-              onClick={() => {
-                setShowConfirmation(false);
-                setConfirmationAction(null);
-                onClose?.();
-              }}
+            <button 
+              onClick={onClose}
               className="text-gray-400 hover:text-gray-600"
-              disabled={loading}
             >
               <X className="w-5 h-5" />
             </button>
@@ -156,61 +54,119 @@ const SubscriptionControls = ({
 
           <div className="mb-6">
             <div className="flex items-center mb-4">
-              <AlertTriangle className="w-6 h-6 text-yellow-500 mr-2" />
-              <span className="text-gray-900 font-medium">
-                {confirmationAction === 'change' ? 'Final Confirmation' : 'Are you sure?'}
+              {isUpgrade ? (
+                <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
+              ) : (
+                <Settings className="w-5 h-5 text-blue-500 mr-2" />
+              )}
+              <span className="text-sm text-gray-600">
+                You are about to {isUpgrade ? 'upgrade' : 'change'} from{' '}
+                <span className="font-medium capitalize">
+                  {currentSubscription?.tier || 'current'} plan
+                </span>{' '}
+                to{' '}
+                <span className="font-medium capitalize">
+                  {selectedPlan} plan
+                </span>
               </span>
             </div>
-
-            <div className="text-sm text-gray-600">
-              {confirmationAction === 'change' ? (
-                <div>
-                  <p className="mb-2">
-                    You are about to change your subscription from <strong>{currentPlan?.name}</strong> to <strong>{newPlan?.name}</strong>.
-                  </p>
-                  <p className="mb-2">
-                    This action will be processed immediately in simulation mode.
-                  </p>
-                  <p>
-                    Changes take effect immediately and your next billing cycle will be adjusted accordingly.
-                  </p>
-                </div>
-              ) : (
-                <div>
-                  <p className="mb-2">
-                    You are about to cancel your <strong>{currentPlan?.name}</strong> subscription.
-                  </p>
-                  <p className="mb-2">
-                    You will retain access to your current plan until your next billing date.
-                  </p>
-                  <p>
-                    After cancellation, you will be moved to the Registered (free) tier.
-                  </p>
-                </div>
-              )}
+            
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h4 className="font-medium text-blue-900 mb-2">What happens next:</h4>
+              <ul className="text-sm text-blue-800 space-y-1">
+                <li>• Your plan will be updated immediately</li>
+                <li>• Credit allowance will be adjusted</li>
+                <li>• Billing cycle will be updated</li>
+                {isUpgrade && <li>• You'll gain access to new features</li>}
+              </ul>
             </div>
           </div>
 
           <div className="flex space-x-3">
             <Button
-              onClick={() => {
-                setShowConfirmation(false);
-                setConfirmationAction(null);
-                onClose?.();
-              }}
+              onClick={onClose}
+              className="flex-1 bg-gray-100 text-gray-700 hover:bg-gray-200"
               disabled={loading}
-              className="flex-1 bg-gray-300 text-gray-700 hover:bg-gray-400"
             >
-              Go Back
+              Cancel
             </Button>
             <Button
-              onClick={executeAction}
+              onClick={handleConfirmChange}
               disabled={loading}
               className={`flex-1 text-white ${
-                confirmationAction === 'change' ?'bg-blue-600 hover:bg-blue-700' :'bg-red-600 hover:bg-red-700'
+                isUpgrade 
+                  ? 'bg-green-600 hover:bg-green-700' :'bg-blue-600 hover:bg-blue-700'
               }`}
             >
-              {loading ? 'Processing...' : confirmationAction === 'change' ? 'Confirm Change' : 'Cancel Subscription'}
+              {loading ? 'Processing...' : `Confirm ${isUpgrade ? 'Upgrade' : 'Change'}`}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Cancel Subscription Confirmation Modal
+  if (showCancelConfirm) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-red-900">Cancel Subscription</h3>
+            <button 
+              onClick={() => setShowCancelConfirm(false)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="mb-6">
+            <div className="flex items-center mb-4">
+              <AlertTriangle className="w-5 h-5 text-red-500 mr-2" />
+              <span className="text-sm text-gray-600">
+                You are about to cancel your subscription
+              </span>
+            </div>
+            
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+              <h4 className="font-medium text-red-900 mb-2">What happens when you cancel:</h4>
+              <ul className="text-sm text-red-800 space-y-1">
+                <li>• You'll retain access until your next billing date</li>
+                <li>• No future charges will occur</li>
+                <li>• Your credits will be limited after expiration</li>
+                <li>• You can reactivate anytime</li>
+              </ul>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Reason for cancellation (optional)
+              </label>
+              <textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e?.target?.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                rows="3"
+                placeholder="Let us know why you're cancelling..."
+              />
+            </div>
+          </div>
+
+          <div className="flex space-x-3">
+            <Button
+              onClick={() => setShowCancelConfirm(false)}
+              className="flex-1 bg-gray-100 text-gray-700 hover:bg-gray-200"
+              disabled={loading}
+            >
+              Keep Subscription
+            </Button>
+            <Button
+              onClick={handleCancelSubscription}
+              disabled={loading}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+            >
+              {loading ? 'Processing...' : 'Confirm Cancellation'}
             </Button>
           </div>
         </div>

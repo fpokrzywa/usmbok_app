@@ -69,7 +69,10 @@ const SearchFilters = ({ searchTerm, onSearchChange, filters, onFiltersChange })
               options={[
                 { value: 'all', label: 'All Types' },
                 { value: 'trial', label: 'Trial' },
-                { value: 'premium', label: 'Premium' },
+                { value: 'subscriber', label: 'Subscriber' },
+                { value: 'founder', label: 'Founder' },
+                { value: 'unlimited', label: 'Unlimited' },
+                { value: 'premium', label: 'Premium (Legacy)' },
                 { value: 'free', label: 'Free' }
               ]}
             />

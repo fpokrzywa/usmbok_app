@@ -12,6 +12,7 @@ import ExportDialog from './components/ExportDialog';
 import Button from '../../components/ui/Button';
 import Icon from '../../components/AppIcon';
 import { userManagementService } from '../../services/userManagementService';
+import activityLogService from '../../services/activityLogService';
 
 const UserManagement = () => {
   const { user } = useAuth();
@@ -57,6 +58,69 @@ const UserManagement = () => {
   useEffect(() => {
     filterUsers();
   }, [users, searchTerm, filters]);
+
+  // Real-time subscription for automatic updates
+  useEffect(() => {
+    if (!hasAdminAccess) return;
+
+    // Set up real-time subscription for user_profiles changes
+    const userProfilesSubscription = supabase
+      ?.channel('user_profiles_changes')
+      ?.on('postgres_changes', 
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_profiles'
+        },
+        (payload) => {
+          console.log('User profile changed:', payload);
+          // Refresh user data when any user profile changes
+          fetchUsers();
+        }
+      )
+      ?.subscribe();
+
+    // Set up real-time subscription for user_credits changes
+    const userCreditsSubscription = supabase
+      ?.channel('user_credits_changes')
+      ?.on('postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_credits'
+        },
+        (payload) => {
+          console.log('User credits changed:', payload);
+          // Refresh user data when credits change
+          fetchUsers();
+        }
+      )
+      ?.subscribe();
+
+    // Set up real-time subscription for user_subscriptions changes
+    const userSubscriptionsSubscription = supabase
+      ?.channel('user_subscriptions_changes')
+      ?.on('postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_subscriptions'
+        },
+        (payload) => {
+          console.log('User subscription changed:', payload);
+          // Refresh user data when subscriptions change
+          fetchUsers();
+        }
+      )
+      ?.subscribe();
+
+    // Cleanup subscriptions on unmount or when admin access changes
+    return () => {
+      userProfilesSubscription?.unsubscribe();
+      userCreditsSubscription?.unsubscribe();
+      userSubscriptionsSubscription?.unsubscribe();
+    };
+  }, [hasAdminAccess]);
 
   const checkAdminAccess = async () => {
     if (!user?.id) return;
@@ -105,10 +169,10 @@ const UserManagement = () => {
       );
     }
 
-    // Subscription filter
+    // Subscription filter - updated to use tier instead of plan
     if (filters?.subscription !== 'all') {
       filtered = filtered?.filter(user => 
-        user?.user_subscriptions?.some(s => s?.plan === filters?.subscription)
+        user?.user_subscriptions?.some(s => s?.tier === filters?.subscription)
       );
     }
 
@@ -196,7 +260,7 @@ const UserManagement = () => {
         case 'change-subscription':
           for (const userId of userIds) {
             await userManagementService?.updateUserSubscription(userId, {
-              plan: data?.plan,
+              tier: data?.tier || data?.plan, // Support both tier and plan for compatibility
               is_active: true,
               credits_per_month: data?.creditsPerMonth
             });
@@ -218,39 +282,138 @@ const UserManagement = () => {
   const handleUserAction = async (action, userId, data) => {
     try {
       setError(null);
+      const targetUser = users?.find(u => u?.id === userId);
       
       switch (action) {
         case 'toggle-status':
-          const user = users?.find(u => u?.id === userId);
-          await userManagementService?.toggleUserStatus(userId, !user?.is_active);
-          setSuccessMessage(`Successfully ${user?.is_active ? 'deactivated' : 'activated'} user`);
+          await userManagementService?.toggleUserStatus(userId, !targetUser?.is_active);
+          
+          // Log the activity with admin user name
+          await activityLogService?.logActivity({
+            activityType: targetUser?.is_active ? 'user_deactivated' : 'user_activated',
+            entityType: 'user',
+            entityId: userId,
+            userId: userId,
+            description: `User ${targetUser?.is_active ? 'deactivated' : 'activated'} by admin`,
+            metadata: {
+              user_name: targetUser?.full_name || targetUser?.email,
+              previous_status: targetUser?.is_active,
+              new_status: !targetUser?.is_active,
+              admin_name: user?.email
+            }
+          });
+          
+          setSuccessMessage(`Successfully ${targetUser?.is_active ? 'deactivated' : 'activated'} user`);
           break;
+          
         case 'adjust-credits':
           if (data?.operation === 'add') {
             await userManagementService?.addUserCredits(userId, data?.amount, data?.description || 'Admin adjustment');
           } else {
             await userManagementService?.deductUserCredits(userId, data?.amount, data?.description || 'Admin adjustment');
           }
+          
+          // Log credit adjustment with admin user name
+          await activityLogService?.logActivity({
+            activityType: 'credit_adjustment',
+            entityType: 'credit',
+            entityId: userId,
+            userId: userId,
+            amount: data?.operation === 'add' ? data?.amount : -data?.amount,
+            description: `${data?.operation === 'add' ? 'Added' : 'Deducted'} ${data?.amount} credits ${data?.operation === 'add' ? 'to' : 'from'} user account`,
+            metadata: {
+              user_name: targetUser?.full_name || targetUser?.email,
+              admin_name: user?.email,
+              operation: data?.operation,
+              reason: data?.description || 'Admin adjustment'
+            }
+          });
+          
           setSuccessMessage('Successfully adjusted user credits');
           break;
+          
         case 'change-role':
           await userManagementService?.changeUserRole(userId, data?.role);
+          
+          // Log role change with admin user name
+          await activityLogService?.logActivity({
+            activityType: 'user_role_changed',
+            entityType: 'user',
+            entityId: userId,
+            userId: userId,
+            description: `User role changed to ${data?.role}`,
+            metadata: {
+              user_name: targetUser?.full_name || targetUser?.email,
+              previous_role: targetUser?.role,
+              new_role: data?.role,
+              admin_name: user?.email
+            }
+          });
+          
           setSuccessMessage('Successfully updated user role');
           break;
+          
         case 'change-subscription':
           await userManagementService?.updateUserSubscription(userId, {
-            plan: data?.plan,
+            tier: data?.tier || data?.plan,
             is_active: true,
             credits_per_month: data?.creditsPerMonth
           });
+          
+          // Log subscription change with admin user name
+          await activityLogService?.logActivity({
+            activityType: 'user_updated',
+            entityType: 'user',
+            entityId: userId,
+            userId: userId,
+            description: `User subscription updated to ${data?.tier || data?.plan}`,
+            metadata: {
+              user_name: targetUser?.full_name || targetUser?.email,
+              subscription_tier: data?.tier || data?.plan,
+              admin_name: user?.email
+            }
+          });
+          
           setSuccessMessage('Successfully updated user subscription');
           break;
+          
         case 'update-profile':
           await userManagementService?.updateUserProfile(userId, data);
+          
+          // Log profile update with admin user name
+          await activityLogService?.logActivity({
+            activityType: 'user_updated',
+            entityType: 'user',
+            entityId: userId,
+            userId: userId,
+            description: 'User profile updated by admin',
+            metadata: {
+              user_name: targetUser?.full_name || targetUser?.email,
+              changes: data,
+              admin_name: user?.email
+            }
+          });
+          
           setSuccessMessage('Successfully updated user profile');
           break;
+          
         case 'delete-user':
           await userManagementService?.deleteUser(userId);
+          
+          // Log user deletion with admin user name
+          await activityLogService?.logActivity({
+            activityType: 'user_updated',
+            entityType: 'user',
+            entityId: userId,
+            userId: userId,
+            description: 'User account deleted by admin',
+            metadata: {
+              user_name: targetUser?.full_name || targetUser?.email,
+              admin_name: user?.email,
+              action: 'deleted'
+            }
+          });
+          
           setSuccessMessage('Successfully deleted user');
           break;
       }
