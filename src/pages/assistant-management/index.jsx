@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -24,6 +24,8 @@ const AssistantManagement = () => {
   const [domainFilter, setDomainFilter] = useState('all');
   const [showEditor, setShowEditor] = useState(false);
   const [editingAssistant, setEditingAssistant] = useState(null);
+  const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   // Knowledge banks as specified in requirements
   const knowledgeBanks = [
@@ -90,16 +92,38 @@ const AssistantManagement = () => {
     checkAdminAccess();
   }, [user?.id]);
 
-  const fetchAssistants = async () => {
+  // Fetch assistants data with updated state field
+  const fetchAssistants = useCallback(async () => {
     try {
-      const { data, error } = await supabase?.from('assistants')?.select('*')?.order('name');
+      setLoading(true);
+      const { data, error } = await supabase
+        ?.from('assistants')
+        ?.select(`
+          id,
+          name,
+          description,
+          domain,
+          knowledge_bank,
+          credits_per_message,
+          state,
+          created_at,
+          updated_at,
+          openai_assistant_id
+        `)
+        ?.order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
+
       setAssistants(data || []);
-    } catch (error) {
-      console.error('Error fetching assistants:', error);
+    } catch (err) {
+      console.error('Error fetching assistants:', err);
+      setError('Failed to load assistants. Please try again.');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
 
   // Filter assistants based on search and filters
   useEffect(() => {
@@ -113,10 +137,16 @@ const AssistantManagement = () => {
       );
     }
 
+    // Fix status filtering to match database string values
     if (statusFilter !== 'all') {
-      filtered = filtered?.filter(assistant => 
-        statusFilter === 'active' ? assistant?.is_active : !assistant?.is_active
-      );
+      filtered = filtered?.filter(assistant => {
+        if (statusFilter === 'active') {
+          return assistant?.state === 'Active';
+        } else if (statusFilter === 'inactive') {
+          return assistant?.state === 'Inactive';
+        }
+        return true;
+      });
     }
 
     if (domainFilter !== 'all') {
@@ -205,7 +235,10 @@ const AssistantManagement = () => {
         // Update existing assistant with improved error handling
         const { error } = await supabase
           ?.from('assistants')
-          ?.update(assistantData)
+          ?.update({
+            ...assistantData,
+            updated_at: new Date()?.toISOString()
+          })
           ?.eq('id', editingAssistant?.id);
         
         if (error) {
@@ -223,6 +256,7 @@ const AssistantManagement = () => {
             assistant_name: assistantData?.name,
             knowledge_bank: assistantData?.knowledge_bank,
             domain: assistantData?.domain,
+            state: assistantData?.state, // Changed from is_active to state
             changes: assistantData
           }
         });
@@ -230,7 +264,11 @@ const AssistantManagement = () => {
         // Create new assistant
         const { data, error } = await supabase
           ?.from('assistants')
-          ?.insert(assistantData)
+          ?.insert({
+            ...assistantData,
+            created_at: new Date()?.toISOString(),
+            updated_at: new Date()?.toISOString()
+          })
           ?.select()
           ?.single();
         
@@ -248,7 +286,8 @@ const AssistantManagement = () => {
           metadata: {
             assistant_name: assistantData?.name,
             knowledge_bank: assistantData?.knowledge_bank,
-            domain: assistantData?.domain
+            domain: assistantData?.domain,
+            state: assistantData?.state // Changed from is_active to state
           }
         });
       }
@@ -279,27 +318,77 @@ const AssistantManagement = () => {
     }
   };
 
+  const handleToggleStatus = async (assistantId, currentState) => {
+    try {
+      const newState = currentState === 'Active' ? 'Inactive' : 'Active';
+      
+      const { error } = await supabase
+        ?.from('assistants')
+        ?.update({ state: newState })
+        ?.eq('id', assistantId);
+
+      if (error) {
+        throw error;
+      }
+
+      // Update local state
+      setAssistants(prev => 
+        prev?.map(assistant => 
+          assistant?.id === assistantId 
+            ? { ...assistant, state: newState }
+            : assistant
+        )
+      );
+
+      setSuccessMessage(`Assistant ${newState?.toLowerCase()} successfully!`);
+    } catch (err) {
+      console.error('Error updating assistant status:', err);
+      setError(`Failed to update assistant status: ${err?.message}`);
+    }
+  };
+
   const handleBulkStatusChange = async (status) => {
     try {
-      const { error } = await supabase?.from('assistants')?.update({ is_active: status === 'active' })?.in('id', Array.from(selectedAssistants));
+      const assistantIds = Array.from(selectedAssistants);
+      // Map UI status to database values
+      const newState = status === 'active' ? 'Active' : 'Inactive';
 
-      if (error) throw error;
-      await fetchAssistants();
+      const { error } = await supabase
+        ?.from('assistants')
+        ?.update({ state: newState })
+        ?.in('id', assistantIds);
+
+      if (error) {
+        throw error;
+      }
+
+      // Update local state
+      setAssistants(prev =>
+        prev?.map(assistant =>
+          assistantIds?.includes(assistant?.id)
+            ? { ...assistant, state: newState }
+            : assistant
+        )
+      );
+
       setSelectedAssistants(new Set());
-    } catch (error) {
-      console.error('Error updating assistant status:', error);
+      setSuccessMessage(`Successfully updated ${assistantIds?.length} assistants to ${newState}`);
+    } catch (err) {
+      console.error('Error in bulk status change:', err);
+      setError(`Failed to update assistants: ${err?.message}`);
     }
   };
 
   const handleAssistantStatusChange = async (assistantId, action, reason) => {
     try {
-      const newStatus = action === 'activate';
+      // Map action to database values
+      const newState = action === 'activate' ? 'Active' : 'Inactive';
       
-      // Update assistant status with error handling
+      // Update assistant status with explicit timestamp and detailed logging
       const { error } = await supabase
         ?.from('assistants')
         ?.update({ 
-          is_active: newStatus,
+          state: newState,
           updated_at: new Date()?.toISOString()
         })
         ?.eq('id', assistantId);
@@ -309,10 +398,10 @@ const AssistantManagement = () => {
         throw new Error('Failed to update assistant status in database');
       }
 
-      // Log admin activity with proper error handling
+      // Log admin activity with comprehensive metadata
       const { data: adminProfile } = await supabase
         ?.from('user_profiles')
-        ?.select('full_name')
+        ?.select('full_name, email')
         ?.eq('id', user?.id)
         ?.single();
 
@@ -322,29 +411,32 @@ const AssistantManagement = () => {
           admin_user_id: user?.id,
           entity_type: 'assistant',
           entity_id: assistantId,
-          activity_type: newStatus ? 'assistant_activated' : 'assistant_deactivated',
-          description: reason || `Assistant ${action}d by ${adminProfile?.full_name || 'admin'}`,
+          activity_type: newState === 'Active' ? 'assistant_activated' : 'assistant_deactivated',
+          description: reason || `Assistant ${action}d by ${adminProfile?.full_name || adminProfile?.email || 'admin'}`,
           metadata: {
             action: action,
             reason: reason,
             admin_name: adminProfile?.full_name,
+            admin_email: adminProfile?.email,
             assistant_id: assistantId,
-            new_status: newStatus
+            new_status: newState,
+            previous_status: newState === 'Active' ? 'Inactive' : 'Active',
+            timestamp: new Date()?.toISOString(),
+            user_agent: navigator?.userAgent || 'unknown'
           }
         });
 
       if (logError) console.error('Error logging admin activity:', logError);
 
-      // Force refresh to ensure UI reflects database changes
+      // Force immediate UI update and data refresh
       await fetchAssistants();
       
-      // Success feedback could be added here
-      console.log(`Successfully ${action}d assistant`);
+      // Success feedback with better UX
+      console.log(`✅ Successfully ${action}d assistant`);
       
     } catch (error) {
-      console.error(`Error ${action}ing assistant:`, error);
-      // Show user-friendly error message
-      alert(`Failed to ${action} assistant. Please try again.`);
+      console.error(`❌ Error ${action}ing assistant:`, error);
+      // Re-throw to let the card component handle the error display
       throw error;
     }
   };
@@ -467,6 +559,7 @@ const AssistantManagement = () => {
               {selectedAssistants?.size > 0 && (
                 <BulkActionsPanel
                   selectedCount={selectedAssistants?.size}
+                  onBulkStatusChange={handleBulkStatusChange}
                   onActivate={() => handleBulkStatusChange('active')}
                   onDeactivate={() => handleBulkStatusChange('inactive')}
                   onClear={() => setSelectedAssistants(new Set())}
@@ -493,7 +586,7 @@ const AssistantManagement = () => {
                 onSelect={() => handleAssistantSelect(assistant?.id)}
                 onEdit={() => handleEditAssistant(assistant)}
                 onDelete={() => handleDeleteAssistant(assistant?.id)}
-                onStatusChange={handleAssistantStatusChange}
+                onStatusChange={handleToggleStatus}
               />
             ))}
           </div>

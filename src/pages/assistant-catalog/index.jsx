@@ -10,7 +10,6 @@ import { supabase } from '../../lib/supabase';
 const AssistantCatalog = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedSpecialty, setSelectedSpecialty] = useState('');
   const [assistantCompanions, setAssistantCompanions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -95,32 +94,30 @@ const AssistantCatalog = () => {
         setLoading(true);
         setError(null);
 
-        const { data, error: supabaseError } = await supabase?.from('assistants')?.select('*')?.eq('is_active', true)?.order('created_at', { ascending: true });
+        const { data, error: supabaseError } = await supabase?.from('assistants')?.select('*')?.eq('state', 'Active')?.order('created_at', { ascending: true });
 
         if (supabaseError) {
           throw supabaseError;
         }
 
-        // Transform Supabase data to match UI expectations - using actual database values
+        // Transform Supabase data to match UI expectations - using domain codes as second line
         const transformedAssistants = data?.map((assistant) => {
-          // Get domain display info from database value, not hardcoded mapping
-          const domainInfo = getDomainDisplayInfo(assistant?.domain, assistant?.name);
-          const category = getCategoryFromKnowledgeBank(assistant?.knowledge_bank);
           const iconInfo = getIconFromKnowledgeBank(assistant?.knowledge_bank);
 
           return {
             id: assistant?.id,
-            name: assistant?.name, // Use actual assistant name from database
-            subtitle: domainInfo?.subtitle, // Use actual domain from database
+            name: assistant?.name, // Assistant name as first line
+            subtitle: assistant?.domain, // Domain code as second line (USMXXX, USM1XX, etc.)
             description: assistant?.description || '',
-            category: category,
             specialty: assistant?.domain, // Keep original domain for filtering
             icon: iconInfo?.icon,
             color: iconInfo?.color,
             expertise: [], // Will be populated from description or other fields if available
             rating: 4.8, // Default rating - could be stored in DB
             conversations: 0, // Could be calculated from actual conversation counts
-            credits_per_message: assistant?.credits_per_message || 10
+            credits_per_message: assistant?.credits_per_message || 10,
+            knowledge_bank: assistant?.knowledge_bank, // Add knowledge_bank for category mapping
+            state: assistant?.state // Add state for future reference
           };
         }) || [];
 
@@ -143,12 +140,10 @@ const AssistantCatalog = () => {
     assistant?.description?.toLowerCase()?.includes(searchQuery?.toLowerCase()) ||
     assistant?.subtitle?.toLowerCase()?.includes(searchQuery?.toLowerCase());
 
-    const matchesCategory = !selectedCategory || selectedCategory === 'all' || assistant?.category?.toLowerCase()?.replace(/\s+/g, '-')?.includes(selectedCategory?.replace(/-/g, '_'));
-
     const matchesSpecialty = !selectedSpecialty || selectedSpecialty === 'all' ||
     assistant?.specialty === selectedSpecialty;
 
-    return matchesSearch && matchesCategory && matchesSpecialty;
+    return matchesSearch && matchesSpecialty;
   });
 
   // Add category options based on assistants data
@@ -165,18 +160,18 @@ const AssistantCatalog = () => {
   // Add specialty options based on assistants data - updated to match database values
   const specialtyOptions = [
     { value: 'all', label: 'All Specialties' },
-    { value: 'usmbok', label: 'USMBOK' },
-    { value: 'service_infrastructure_management', label: 'USMXXX' },
-    { value: 'service_consumer_management', label: 'USM1XX' },
-    { value: 'service_strategy_management', label: 'USM2XX' },
-    { value: 'service_performance_management', label: 'USM3XX' },
-    { value: 'service_experience_management', label: 'USM4XX' },
-    { value: 'service_delivery_management', label: 'USM5XX' },
-    { value: 'service_operations_management', label: 'USM6XX' },
-    { value: 'service_value_management', label: 'USM7XX' },
-    { value: 'intelligent_automation', label: 'USM8XX' },
-    { value: 'itil', label: 'ITIL' },
-    { value: 'it4it', label: 'IT4IT' }
+    { value: 'USMXXX', label: 'USMXXX' },
+    { value: 'USM1XX', label: 'USM1XX' },
+    { value: 'USM2XX', label: 'USM2XX' },
+    { value: 'USM3XX', label: 'USM3XX' },
+    { value: 'USM4XX', label: 'USM4XX' },
+    { value: 'USM5XX', label: 'USM5XX' },
+    { value: 'USM6XX', label: 'USM6XX' },
+    { value: 'USM7XX', label: 'USM7XX' },
+    { value: 'USM8XX', label: 'USM8XX' },
+    { value: 'USM9XX', label: 'USM9XX' },
+    { value: 'ITIL', label: 'ITIL' },
+    { value: 'IT4IT', label: 'IT4IT' }
   ];
 
   const handleStartConversation = (assistantId) => {
@@ -226,12 +221,8 @@ const AssistantCatalog = () => {
       {/* Hero Section */}
       <section className="bg-gradient-to-br from-primary/5 to-secondary/5 py-12 px-4 sm:px-6 lg:px-8 pt-28">
         <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-4xl font-bold text-foreground mb-4">Knowledge Bank
-
-          </h1>
-          <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">Choose from our specialized AI Assistants, each trained in specific domains to provide expert guidance and support.
-
-          </p>
+          <h1 className="text-4xl font-bold text-foreground mb-4">Knowledge Bank</h1>
+          <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">Choose from our specialized AI Assistants, each trained in specific domains to provide expert guidance and support.</p>
 
           {/* Search and Filters */}
           <form onSubmit={handleSearch} className="max-w-4xl mx-auto">
@@ -243,17 +234,6 @@ const AssistantCatalog = () => {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e?.target?.value)}
                   className="w-full" />
-
-              </div>
-              
-              <div className="lg:w-48">
-                <Select
-                  options={categoryOptions}
-                  value={selectedCategory}
-                  onChange={setSelectedCategory}
-                  placeholder="Category"
-                  className="w-full" />
-
               </div>
               
               <div className="lg:w-48">
@@ -263,7 +243,6 @@ const AssistantCatalog = () => {
                   onChange={setSelectedSpecialty}
                   placeholder="Specialty"
                   className="w-full" />
-
               </div>
             </div>
           </form>
@@ -308,7 +287,7 @@ const AssistantCatalog = () => {
                   {/* Category Badge */}
                   <div className="mb-4">
                     <span className="inline-block px-3 py-1 text-xs bg-primary/10 text-primary rounded-full">
-                      {assistant?.category}
+                      {getCategoryFromKnowledgeBank(assistant?.knowledge_bank)}
                     </span>
                   </div>
 
@@ -328,7 +307,6 @@ const AssistantCatalog = () => {
                   <Button
                 onClick={() => handleStartConversation(assistant?.id)}
                 className="w-full">
-
                     Start Conversation
                   </Button>
                 </div>

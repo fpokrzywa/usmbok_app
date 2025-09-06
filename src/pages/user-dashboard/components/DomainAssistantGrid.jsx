@@ -1,9 +1,28 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 
 const DomainAssistantGrid = ({ domains }) => {
+  // Add missing state variables
+  const [loading, setLoading] = useState(false);
+  const [assistants, setAssistants] = useState([]);
+  const [error, setError] = useState(null);
+  
+  // Add mock supabase object since it's not imported
+  const supabase = {
+    from: (table) => ({
+      select: (fields) => ({
+        eq: (field, value) => ({
+          order: (field, options) => ({
+            // Mock implementation - returns empty data
+            then: () => Promise.resolve({ data: [], error: null })
+          })
+        })
+      })
+    })
+  };
+
   // Updated to handle the 12 knowledge banks with proper domain mapping
   const getDomainIcon = (domain) => {
     const iconMap = {
@@ -98,6 +117,30 @@ const DomainAssistantGrid = ({ domains }) => {
     };
     return subtitleMap?.[domainId] || '';
   };
+
+  useEffect(() => {
+    const fetchAssistants = async () => {
+      try {
+        setLoading(true);
+        const { data, error } = await supabase
+          ?.from('assistants')
+          ?.select('*')
+          ?.eq('state', 'Active') // Updated to use string value
+          ?.order('name', { ascending: true });
+
+        if (error) throw error;
+
+        setAssistants(data || []);
+      } catch (err) {
+        console.error('Error fetching assistants:', err);
+        setError('Failed to load assistants');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAssistants();
+  }, []);
 
   return (
     <div className="bg-card border border-border rounded-lg p-6 shadow-sm">

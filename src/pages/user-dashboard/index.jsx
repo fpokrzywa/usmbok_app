@@ -61,7 +61,7 @@ const UserDashboard = () => {
       if (conversationsError) throw conversationsError;
 
       // Fetch assistants - now properly aligned with 12 knowledge banks
-      const { data: assistantsData, error: assistantsError } = await supabase?.from('assistants')?.select('*')?.eq('is_active', true)?.order('domain');
+      const { data: assistantsData, error: assistantsError } = await supabase?.from('assistants')?.select('*')?.eq('state', true)?.order('domain');
 
       if (assistantsError) throw assistantsError;
 

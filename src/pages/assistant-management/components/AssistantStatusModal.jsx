@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
 import Icon from '../../../components/AppIcon';
@@ -11,132 +11,151 @@ const AssistantStatusModal = ({
   action // 'activate' or 'deactivate'
 }) => {
   const [reason, setReason] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [processing, setProcessing] = useState(false);
 
-  if (!isOpen || !assistant) return null;
+  useEffect(() => {
+    if (isOpen) {
+      setReason(''); // Reset reason when modal opens
+      setProcessing(false);
+    }
+  }, [isOpen]);
 
-  const isActivating = action === 'activate';
-  
   const handleSubmit = async (e) => {
     e?.preventDefault();
-    setLoading(true);
+    
+    if (!reason?.trim()) {
+      return; // Don't proceed without a reason
+    }
+    
+    setProcessing(true);
     
     try {
-      await onConfirm(reason || `Assistant ${action}d by admin`);
+      await onConfirm(reason?.trim());
     } catch (error) {
-      console.error(`Error ${action}ing assistant:`, error);
-    } finally {
-      setLoading(false);
+      console.error('Error processing status change:', error);
+      // Don't close modal on error, let user retry
+      setProcessing(false);
+      return;
     }
+    
+    setProcessing(false);
+    onClose(); // Close modal only on success
   };
 
-  const handleClose = () => {
+  const handleCancel = () => {
     setReason('');
+    setProcessing(false);
     onClose();
   };
 
+  if (!isOpen) return null;
+
+  const isActivating = action === 'activate';
+  const title = isActivating ? 'Activate Assistant' : 'Deactivate Assistant';
+  const actionText = isActivating ? 'Activate' : 'Deactivate';
+  const statusText = isActivating ? 'active' : 'inactive';
+  
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-card border border-border rounded-lg max-w-md w-full">
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop */}
+      <div 
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={handleCancel}
+      />
+      
+      {/* Modal */}
+      <div className="relative bg-card border border-border rounded-xl p-6 w-full max-w-md mx-4">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-border">
+        <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-3">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-              isActivating ? 'bg-green-100' : 'bg-orange-100'
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+              isActivating ? 'bg-green-500' : 'bg-orange-500'
             }`}>
-              <Icon 
-                name={isActivating ? "Play" : "Pause"} 
-                size={16} 
-                className={isActivating ? "text-green-600" : "text-orange-600"} 
-              />
+              <Icon name={isActivating ? "Play" : "Pause"} size={20} className="text-white" />
             </div>
-            <h3 className="text-lg font-semibold text-foreground">
-              {isActivating ? 'Activate' : 'Deactivate'} Assistant
-            </h3>
+            <h2 className="text-lg font-semibold text-foreground">{title}</h2>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            iconName="X"
-            onClick={handleClose}
-            className="h-8 w-8 p-0"
-          />
+          <button
+            onClick={handleCancel}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+            disabled={processing}
+          >
+            <Icon name="X" size={20} />
+          </button>
         </div>
 
         {/* Content */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Assistant Info */}
-          <div className="p-3 bg-muted/30 rounded-md">
-            <div className="flex items-center space-x-3 mb-2">
-              <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-                <Icon name="Bot" size={16} className="text-primary" />
+        <div className="mb-6">
+          <p className="text-sm text-muted-foreground mb-4">
+            You are about to {actionText?.toLowerCase()} "{assistant?.name}".
+            {isActivating 
+              ? ' This will make the assistant available for conversations.'
+              : ' This will hide the assistant from users and disable conversations.'
+            }
+          </p>
+          
+          <div className="bg-muted/30 rounded-lg p-4 mb-4">
+            <div className="flex items-center space-x-3 mb-3">
+              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                <Icon name="Bot" size={16} className="text-white" />
               </div>
               <div>
-                <div className="font-medium text-foreground">{assistant?.name}</div>
-                <div className="text-sm text-muted-foreground">{assistant?.knowledge_bank}</div>
+                <h3 className="font-medium text-foreground">{assistant?.name}</h3>
+                <p className="text-sm text-muted-foreground">{assistant?.knowledge_bank}</p>
               </div>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Status will change to: <span className={`font-medium ${
+                isActivating ? 'text-green-600' : 'text-orange-600'
+              }`}>
+                {statusText}
+              </span>
             </div>
           </div>
 
-          {/* Confirmation Message */}
-          <div className="text-sm text-muted-foreground">
-            {isActivating ? (
-              <>
-                This will <strong>activate</strong> the assistant and make it available for users.
-                Users will be able to interact with this assistant and consume tokens.
-              </>
-            ) : (
-              <>
-                This will <strong>deactivate</strong> the assistant and make it unavailable for users.
-                Existing conversations will remain intact but new interactions will be blocked.
-              </>
-            )}
-          </div>
-
-          {/* Reason Input */}
-          <div>
+          <form onSubmit={handleSubmit}>
             <label className="block text-sm font-medium text-foreground mb-2">
-              Reason (Optional)
+              Reason for {actionText?.toLowerCase()} <span className="text-error">*</span>
             </label>
             <Input
               type="text"
               value={reason}
               onChange={(e) => setReason(e?.target?.value)}
-              placeholder={isActivating ? "Reason for activating this assistant" : "Reason for deactivating this assistant"}
+              placeholder={`Why are you ${actionText?.toLowerCase()}ing this assistant?`}
+              disabled={processing}
+              required
             />
-          </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              This reason will be logged for audit purposes
+            </p>
+          </form>
+        </div>
 
-          {/* Actions */}
-          <div className="flex space-x-3 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleClose}
-              className="flex-1"
-              disabled={loading}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant={isActivating ? "default" : "destructive"}
-              className="flex-1"
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <Icon name="Loader2" size={16} className="mr-2 animate-spin" />
-                  {isActivating ? 'Activating...' : 'Deactivating...'}
-                </>
-              ) : (
-                <>
-                  <Icon name={isActivating ? "Play" : "Pause"} size={16} className="mr-2" />
-                  {isActivating ? 'Activate' : 'Deactivate'}
-                </>
-              )}
-            </Button>
-          </div>
-        </form>
+        {/* Actions */}
+        <div className="flex items-center justify-end space-x-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleCancel}
+            disabled={processing}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant={isActivating ? "default" : "destructive"}
+            onClick={handleSubmit}
+            iconName={processing ? "Loader2" : (isActivating ? "Play" : "Pause")}
+            iconPosition="left"
+            disabled={processing || !reason?.trim()}
+            className={processing ? "animate-spin" : ""}
+          >
+            {processing 
+              ? `${actionText}ing...`
+              : `${actionText} Assistant`
+            }
+          </Button>
+        </div>
       </div>
     </div>
   );

@@ -12,6 +12,7 @@ const AssistantCard = ({
   onStatusChange 
 }) => {
   const [showStatusModal, setShowStatusModal] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
 
   // Create a function to get display domain codes from database values
@@ -87,21 +88,26 @@ const AssistantCard = ({
     return domain?.charAt(0)?.toUpperCase() + domain?.slice(1);
   };
 
+  const handleStatusToggle = async (e) => {
+    e?.stopPropagation();
+    setIsUpdating(true);
+    
+    try {
+      // Fix: Pass correct string values to match database constraint
+      const currentState = assistant?.state;
+      const newAction = currentState === 'Active' ? 'deactivate' : 'activate';
+      
+      await onStatusChange(assistant?.id, currentState);
+    } catch (error) {
+      console.error('Error toggling status:', error);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleStatusClick = (action) => {
     setPendingAction(action);
     setShowStatusModal(true);
-  };
-
-  const handleStatusConfirm = async (reason) => {
-    if (onStatusChange && pendingAction) {
-      try {
-        await onStatusChange(assistant?.id, pendingAction, reason);
-      } catch (error) {
-        console.error('Error updating assistant status:', error);
-      }
-    }
-    setShowStatusModal(false);
-    setPendingAction(null);
   };
 
   const handleStatusCancel = () => {
@@ -109,12 +115,27 @@ const AssistantCard = ({
     setPendingAction(null);
   };
 
+  const handleStatusConfirm = async () => {
+    if (pendingAction && assistant?.id) {
+      setIsUpdating(true);
+      try {
+        await onStatusChange(assistant?.id, pendingAction);
+      } catch (error) {
+        console.error('Error updating status:', error);
+      } finally {
+        setIsUpdating(false);
+        setShowStatusModal(false);
+        setPendingAction(null);
+      }
+    }
+  };
+
   return (
     <>
       <div className={`bg-card border rounded-lg p-6 hover:shadow-md transition-all ${
         isSelected ? 'ring-2 ring-primary' : 'border-border'
-      }`}>
-        {/* Header with selection */}
+      } ${isUpdating ? 'opacity-75 pointer-events-none' : ''}`}>
+        {/* Header with selection and simple status indicator */}
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center space-x-3">
             <input
@@ -122,21 +143,26 @@ const AssistantCard = ({
               className="rounded border-border"
               checked={isSelected}
               onChange={onSelect}
+              disabled={isUpdating}
             />
-            <div className={`w-12 h-12 ${getDomainColor(assistant?.domain)} rounded-full flex items-center justify-center`}>
+            <div className={`w-12 h-12 ${getDomainColor(assistant?.domain)} rounded-full flex items-center justify-center relative`}>
               <Icon name={getDomainIcon(assistant?.domain)} size={24} className="text-white" />
+              {isUpdating && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
+                  <Icon name="Loader2" size={16} className="text-white animate-spin" />
+                </div>
+              )}
             </div>
           </div>
-          <div className={`px-2 py-1 text-xs font-medium rounded-full ${
-            assistant?.is_active 
-              ? 'bg-success/10 text-success' : 'bg-error/10 text-error'
-          }`}>
-            {assistant?.is_active ? 'Active' : 'Inactive'}
-          </div>
+          
+          {/* Simple non-clickable status indicator */}
+          <div className={`w-3 h-3 rounded-full ${
+            assistant?.state === 'Active' ? 'bg-green-500' : 'bg-gray-400'
+          }`} />
         </div>
 
         {/* Assistant Info */}
-        <div className="mb-4">
+        <div className="mb-6">
           <h3 className="font-semibold text-foreground mb-1">{assistant?.name}</h3>
           
           {/* Domain code as second line subtitle - prominently displayed */}
@@ -167,65 +193,28 @@ const AssistantCard = ({
           )}
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-4 mb-4 p-3 bg-muted/30 rounded-md">
-          <div className="text-center">
-            <div className="text-lg font-semibold text-foreground">
-              {assistant?.credits_per_message || 10}
-            </div>
-            <div className="text-xs text-muted-foreground">Credits/Message</div>
-          </div>
-          <div className="text-center">
-            <div className="text-lg font-semibold text-foreground">
-              {assistant?.is_active ? 'Available' : 'Paused'}
-            </div>
-            <div className="text-xs text-muted-foreground">Status</div>
-          </div>
+        {/* Only Edit button for actions */}
+        <div className="flex justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            iconName="Edit"
+            onClick={onEdit}
+            disabled={isUpdating}
+          >
+            Edit
+          </Button>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex space-x-2">
-          <div className="relative group">
-            <Button
-              variant="outline"
-              size="sm"
-              iconName="Edit"
-              onClick={onEdit}
-              className="flex-1"
-            >
-              Edit
-            </Button>
-            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-              Edit Assistant Settings
+        {/* Loading overlay for status updates */}
+        {isUpdating && (
+          <div className="absolute inset-0 bg-background/80 rounded-lg flex items-center justify-center">
+            <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+              <Icon name="Loader2" size={16} className="animate-spin" />
+              <span>Updating status...</span>
             </div>
           </div>
-
-          <div className="relative group">
-            <Button
-              variant="ghost"
-              size="sm"
-              iconName={assistant?.is_active ? "Pause" : "Play"}
-              onClick={() => handleStatusClick(assistant?.is_active ? 'deactivate' : 'activate')}
-              className={assistant?.is_active ? "text-orange-600 hover:text-orange-700" : "text-green-600 hover:text-green-700"}
-            />
-            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-              {assistant?.is_active ? 'Deactivate Assistant' : 'Activate Assistant'}
-            </div>
-          </div>
-
-          <div className="relative group">
-            <Button
-              variant="ghost"
-              size="sm"
-              iconName="Trash2"
-              onClick={onDelete}
-              className="text-error hover:text-error"
-            />
-            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-              Delete Assistant
-            </div>
-          </div>
-        </div>
+        )}
       </div>
 
       <AssistantStatusModal

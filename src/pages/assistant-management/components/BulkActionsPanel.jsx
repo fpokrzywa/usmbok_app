@@ -1,11 +1,13 @@
 import React from 'react';
 import Button from '../../../components/ui/Button';
+import Select from '../../../components/ui/Select';
 
 const BulkActionsPanel = ({ 
   selectedCount, 
   onActivate, 
   onDeactivate, 
-  onClear 
+  onClear,
+  onBulkStatusChange // Add this prop to handle bulk status changes
 }) => {
   return (
     <div className="flex items-center space-x-2 px-4 py-2 bg-primary/10 border border-primary/20 rounded-md">
@@ -40,6 +42,20 @@ const BulkActionsPanel = ({
         >
           Clear
         </Button>
+        <Select
+          options={[
+            { value: '', label: 'Status Actions' },
+            { value: 'Active', label: 'Activate Selected' },
+            { value: 'Inactive', label: 'Deactivate Selected' }
+          ]}
+          value={''}
+          onChange={(value) => {
+            if (value && value !== '') {
+              onBulkStatusChange(value);
+            }
+          }}
+          className="w-48"
+        />
       </div>
     </div>
   );
