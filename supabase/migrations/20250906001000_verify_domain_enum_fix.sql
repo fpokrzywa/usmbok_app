@@ -35,6 +35,8 @@ Legacy: technology, healthcare, finance, legal, marketing, education, research, 
 -- Verify the fix by selecting current domain mappings
 -- This will help confirm all domains are correctly mapped
 DO $$
+DECLARE
+    rec RECORD;
 BEGIN
     RAISE NOTICE 'Current domain mappings in assistants table:';
     FOR rec IN 
