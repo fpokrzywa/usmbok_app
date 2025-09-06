@@ -25,20 +25,20 @@ const AssistantEditor = ({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState('');
 
-  // Updated domain options with direct USM codes as values
+  // Updated domain options with clean USM codes only (no descriptive text)
   const domainOptions = [
-    { value: 'USMXXX', label: 'USMXXX - Universal Service Management' },
-    { value: 'USM1XX', label: 'USM1XX - Service Consumer Management' },
-    { value: 'USM2XX', label: 'USM2XX - Service Strategy Management' },
-    { value: 'USM3XX', label: 'USM3XX - Service Performance Management' },
-    { value: 'USM4XX', label: 'USM4XX - Service Experience Management' },
-    { value: 'USM5XX', label: 'USM5XX - Service Delivery Management' },
-    { value: 'USM6XX', label: 'USM6XX - Service Operations Management' },
-    { value: 'USM7XX', label: 'USM7XX - Service Value Management' },
-    { value: 'USM8XX', label: 'USM8XX - Intelligent Automation' },
-    { value: 'USM9XX', label: 'USM9XX - Service Infrastructure Management' },
-    { value: 'ITIL', label: 'ITIL - IT Infrastructure Library' },
-    { value: 'IT4IT', label: 'IT4IT - IT Value Chain Reference Architecture' },
+    { value: 'USMXXX', label: 'USMXXX' },
+    { value: 'USM1XX', label: 'USM1XX' },
+    { value: 'USM2XX', label: 'USM2XX' },
+    { value: 'USM3XX', label: 'USM3XX' },
+    { value: 'USM4XX', label: 'USM4XX' },
+    { value: 'USM5XX', label: 'USM5XX' },
+    { value: 'USM6XX', label: 'USM6XX' },
+    { value: 'USM7XX', label: 'USM7XX' },
+    { value: 'USM8XX', label: 'USM8XX' },
+    { value: 'USM9XX', label: 'USM9XX' },
+    { value: 'ITIL', label: 'ITIL' },
+    { value: 'IT4IT', label: 'IT4IT' },
   ];
 
   const knowledgeBankOptions = knowledgeBanks?.map(bank => ({

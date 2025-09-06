@@ -44,16 +44,18 @@ const AssistantManagement = () => {
   // Domain options simplified to show only USM codes as requested
   const domainOptions = [
     { value: 'all', label: 'All Domains' },
-    { value: 'usmbok', label: 'USMXXX' },
-    { value: 'service_consumer_management', label: 'USM1XX' },
-    { value: 'service_strategy_management', label: 'USM2XX' },
-    { value: 'service_performance_management', label: 'USM3XX' },
-    { value: 'service_experience_management', label: 'USM4XX' },
-    { value: 'service_delivery_management', label: 'USM5XX' },
-    { value: 'service_operations_management', label: 'USM6XX' },
-    { value: 'service_value_management', label: 'USM7XX' },
-    { value: 'intelligent_automation', label: 'USM8XX' },
-    { value: 'service_infrastructure_management', label: 'USM9XX' },
+    { value: 'USMXXX', label: 'USMXXX' },
+    { value: 'USM1XX', label: 'USM1XX' },
+    { value: 'USM2XX', label: 'USM2XX' },
+    { value: 'USM3XX', label: 'USM3XX' },
+    { value: 'USM4XX', label: 'USM4XX' },
+    { value: 'USM5XX', label: 'USM5XX' },
+    { value: 'USM6XX', label: 'USM6XX' },
+    { value: 'USM7XX', label: 'USM7XX' },
+    { value: 'USM8XX', label: 'USM8XX' },
+    { value: 'USM9XX', label: 'USM9XX' },
+    { value: 'ITIL', label: 'ITIL' },
+    { value: 'IT4IT', label: 'IT4IT' },
   ];
 
   const statusOptions = [
